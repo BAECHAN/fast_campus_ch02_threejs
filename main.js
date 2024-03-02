@@ -1,32 +1,12 @@
 import "./style.css";
 import * as THREE from "three";
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
-
-/**
- * 그림자 
- * 조명에 castShadow = true : 조명이 그림자 생성
- * 메쉬에 castShadow = true : 객체가 그림자 생성
- * 바닥에 receiveShadow = true : 바닥이 그림자를 받음
- * 
- * 기본적으로 그림자를 활성화하려면 line : 7과 같이 
- * renderer.shadowMap.enabled = true로 해야함
- * 
- * 그림자의 성능과 최적화
- * 
- * - 그림자는 계산 비용이 많이 들기 때문에 성능에 영향을 줄 수 있으므로,
- *   
- * 1) 필요한 곳에서만 그림자를 사용하고 불필요한 영역에 대한 그림자 계산을 줄여야함
- * 2) 그림자 맵의 해상도를 낮추어 성능을 최적화 하거나 할 수 있다.
- *    -> Light.shadow.mapSize.width와 height 속성을 통해 해상도를 조정
- *       width와 height가 높을수록 해상도가 높아짐
- * 
- * 
- */
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader'
 
 const renderer = new THREE.WebGLRenderer({antialias: true});
 renderer.setSize(window.innerWidth, window.innerHeight);
 
-// 그림자
+
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap; // 성능이 제일 좋은 그림자
 
@@ -53,36 +33,59 @@ floor.receiveShadow = true;
 floor.castShadow = true;
 scene.add(floor);
 
-/** 박스 */
-const boxGeometry = new THREE.BoxGeometry(1,1,1);
-const boxMaterial = new THREE.MeshStandardMaterial({color: 0xffff00});
-const boxMesh = new THREE.Mesh(boxGeometry,  boxMaterial);
-boxMesh.position.y = 0.5;
-boxMesh.castShadow = true;
-scene.add(boxMesh);
-
-
 /** DirectionalLight ( 방향 조명 ) - 특정 방향에서 오는 빛 */
 const directionalLight = new THREE.DirectionalLight(0xffffff, 5);
 directionalLight.castShadow = true;
 directionalLight.position.set(3,4,5);
 directionalLight.lookAt(0,0,0);
-//directionalLight.shadow.mapSize.width = 4096;
+directionalLight.shadow.mapSize.width = 4096;
 directionalLight.shadow.mapSize.height = 4096;
-directionalLight.shadow.mapSize.width = 1024;
-directionalLight.shadow.mapSize.height = 1024;
-
 
 scene.add(directionalLight);
 
-const directionalLightHelper = new THREE.DirectionalLightHelper(directionalLight,1)
-scene.add(directionalLightHelper)
+/** GLTF 동기적 */
+// const gltfLoader = new GLTFLoader();
+// gltfLoader.load("/dancer.glb", (gltf) => {
+//   const character = gltf.scene;
+//   character.position.y = 0.8;
+//   character.scale.set(0.01,0.01,0.01);
+
+//   scene.add(character);
+// })
+
+/** GLTF 비동기적 */
+const gltfLoaderAsync = new GLTFLoader();
+const gltfAsync = await gltfLoaderAsync.loadAsync("/dancer.glb");
+const characterAsync = gltfAsync.scene;
+characterAsync.position.y = 0.8;
+characterAsync.scale.set(0.01,0.01,0.01);
+
+/** 객체에 그림자가 적용이 되지 않을 것이기 때문에 아래와 같은 코드를 추가한다. */
+characterAsync.castShadow = true;
+characterAsync.receiveShadow = true;
+
+/** 위의 코드로만 하면 그림자가 보이지 않는데 
+ * 그 이유는 객체 자체의 그림자를 추가했지만 
+ * 객체를 구성하는 요소 하나하나에도 그림자를 적용해야 되기 때문에
+ * traverse 메서드를 통해 children을 하나씩 타고 내려가면서 그림자를 추가한다. 
+ * 
+ * 궁금하면 콘솔로그 확인해서 children 확인 ㄱ
+ * */
+console.log(gltfAsync)
+
+characterAsync.traverse((obj) => {
+  if(obj.isMesh){
+    obj.castShadow = true;
+    obj.receiveShadow = true;
+  }
+})
+scene.add(characterAsync);
 
 
 
-/** 궤도 컨트롤 */
 const orbitControls = new OrbitControls(camera, renderer.domElement);
-orbitControls.update();
+orbitControls.enableDamping = true; // 카메라 움직임에 관성 효과를 줌
+orbitControls.dampingFactor = 0.03; // 관성의 정도를 정할 수 있음
 
 window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -91,12 +94,11 @@ window.addEventListener('resize', () => {
   renderer.render(scene,camera);
 })
 
+const clock = new THREE.Clock();
 const render = () => {
-  renderer.render(scene, camera);
   requestAnimationFrame(render);
-  
-  // mesh 회전시키기
-  textureAsyncMesh.rotation.y += 0.01;
+  orbitControls.update();
+  renderer.render(scene, camera); 
 }
 
 render();
